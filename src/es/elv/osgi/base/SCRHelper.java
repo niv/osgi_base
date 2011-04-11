@@ -1,6 +1,7 @@
 package es.elv.osgi.base;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.LinkedList;
 import java.util.List;
@@ -18,8 +19,19 @@ public abstract class SCRHelper {
     	this.componentContext = ctxt;
     	this.bundleContext = ctxt.getBundleContext();
 
+	log = createLogInterface(bundleContext);
+
+	autolocateFields(componentContext, this);
+
+		load();
+    }
+
+    public static void autolocateFields(ComponentContext ctx, Object obj) throws
+		SecurityException, NoSuchMethodException, IllegalArgumentException,
+		IllegalAccessException, InvocationTargetException {
+
 		Autolocate autolocate = null;
-		for (final Field f : getClass().getDeclaredFields())
+		for (final Field f : obj.getClass().getDeclaredFields())
 			if ((autolocate = f.getAnnotation(Autolocate.class)) != null) {
 				f.setAccessible(true);
 				Object service = null;
@@ -27,22 +39,19 @@ public abstract class SCRHelper {
 				if (!autolocate.type().equals(Autolocate.class))
 					typeToLocateFor = autolocate.type();
 
-				service = locateServiceFor(typeToLocateFor);
+				service = locateServiceFor(ctx, typeToLocateFor);
 
 				if (!autolocate.method().equals("")) {
 					Method service_m = service.getClass().getMethod(autolocate.method());
 					service = service_m.invoke(service);
 				}
-				f.set(this, service);
+				f.set(obj, service);
 			}
-
-		load();
     }
-
 
     protected void deactivate(ComponentContext ctxt) throws Exception {
 		unload();
-		
+
 		this.componentContext = null;
 		this.bundleContext = null;
     }
@@ -54,10 +63,10 @@ public abstract class SCRHelper {
 	 * A wrapper for SCR to retrieve all Services of the given class.
 	 */
 	@SuppressWarnings("unchecked")
-	protected <T> List<T> locateServicesFor(Class<T> tt) {
+	protected static <T> List<T> locateServicesFor(ComponentContext ctx, Class<T> tt) {
 		List<T> ret = new LinkedList<T>();
 		String[] name = tt.getName().split("\\.");
-		Object[] vv = componentContext.locateServices(name[name.length - 1]);
+		Object[] vv = ctx.locateServices(name[name.length - 1]);
 		if (null != vv)
 			for (Object v : vv)
 				ret.add((T) v);
@@ -65,15 +74,27 @@ public abstract class SCRHelper {
 	}
 
 	/**
+	 * A wrapper for SCR to retrieve all Services of the given class.
+	 */
+	protected <T> List<T> locateServicesFor(Class<T> tt) {
+		return locateServicesFor(componentContext, tt);
+	}
+
+	/**
 	 * A wrapper for SCR to retrieve the first-qualifying service of the given class.
-	 * @param <T>
-	 * @param tt
-	 * @return
 	 */
 	@SuppressWarnings("unchecked")
-	protected <T> T locateServiceFor(Class<T> tt) {
+	protected static <T> T locateServiceFor(ComponentContext ctx, Class<T> tt) {
 		String[] name = tt.getName().split("\\.");
-		return (T) componentContext.locateService(name[name.length - 1]);
+		return (T) ctx.locateService(name[name.length - 1]);
+	}
+
+	/**
+	 * A wrapper for SCR to retrieve the first-qualifying service of the given class.
+	 */
+
+	protected <T> T locateServiceFor(Class<T> tt) {
+		return locateServiceFor(componentContext, tt);
 	}
 
 	/**
@@ -81,59 +102,63 @@ public abstract class SCRHelper {
 	 * OSGi-compatible log messages; if a LogService is available, it will be
 	 * used - otherwise, messages go to stderr.
 	 */
-	protected LogInterface log = new LogInterface() {
-		private void log(int level, String message, Throwable exception) {
-			LogService s = null;
-			ServiceReference logRef = bundleContext.getServiceReference("org.osgi.service.log.LogService");
-			if (logRef != null)
-				s = (LogService) bundleContext.getService(logRef);
+	protected LogInterface log;
 
-			if (s != null) {
-				if (exception != null)
-					s.log(level, message, exception);
-				else
-					s.log(level, message);
-			} else {
-				System.err.println(message);
-				if (exception != null)
-					exception.printStackTrace();
+	public static LogInterface createLogInterface(final BundleContext bctx) {
+		return 	new LogInterface() {
+			private void log(int level, String message, Throwable exception) {
+				LogService s = null;
+				ServiceReference logRef = bctx.getServiceReference("org.osgi.service.log.LogService");
+				if (logRef != null)
+					s = (LogService) bctx.getService(logRef);
+
+				if (s != null) {
+					if (exception != null)
+						s.log(level, message, exception);
+					else
+						s.log(level, message);
+				} else {
+					System.err.println(message);
+					if (exception != null)
+						exception.printStackTrace();
+				}
 			}
-		}
-		@Override
-		public void debug(String message) {
-			log(LogService.LOG_DEBUG, message, null);
-		}
-		@Override
-		public void debug(String message, Throwable exception) {
-			log(LogService.LOG_DEBUG, message, exception);
-		}
-		@Override
-		public void error(String message) {
-			log(LogService.LOG_ERROR, message, null);
-		}
-		@Override
-		public void error(String message, Throwable exception) {
-			log(LogService.LOG_ERROR, message, exception);
-		}
-		@Override
-		public void info(String message) {
-			log(LogService.LOG_INFO, message, null);
-		}
-		@Override
-		public void info(String message, Throwable exception) {
-			log(LogService.LOG_INFO, message, exception);
-		}
-		@Override
-		public void warn(String message) {
-			log(LogService.LOG_WARNING, message, null);
-		}
-		@Override
-		public void warn(String message, Throwable exception) {
-			log(LogService.LOG_WARNING, message, exception);
-		}
-		@Override
-		public void error(Throwable exception) {
-			log(LogService.LOG_ERROR, "", exception);
-		}
-	};
+			@Override
+			public void debug(String message) {
+				log(LogService.LOG_DEBUG, message, null);
+			}
+			@Override
+			public void debug(String message, Throwable exception) {
+				log(LogService.LOG_DEBUG, message, exception);
+			}
+			@Override
+			public void error(String message) {
+				log(LogService.LOG_ERROR, message, null);
+			}
+			@Override
+			public void error(String message, Throwable exception) {
+				log(LogService.LOG_ERROR, message, exception);
+			}
+			@Override
+			public void info(String message) {
+				log(LogService.LOG_INFO, message, null);
+			}
+			@Override
+			public void info(String message, Throwable exception) {
+				log(LogService.LOG_INFO, message, exception);
+			}
+			@Override
+			public void warn(String message) {
+				log(LogService.LOG_WARNING, message, null);
+			}
+			@Override
+			public void warn(String message, Throwable exception) {
+				log(LogService.LOG_WARNING, message, exception);
+			}
+			@Override
+			public void error(Throwable exception) {
+				log(LogService.LOG_ERROR, "", exception);
+			}
+		};
+	}
 }
