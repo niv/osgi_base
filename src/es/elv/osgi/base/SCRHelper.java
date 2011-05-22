@@ -26,6 +26,10 @@ public abstract class SCRHelper {
 		load();
     }
 
+    /**
+     * Resolves all class field members annotated with @Autolocate,
+     * even private ones.
+     */
     public static void autolocateFields(ComponentContext ctx, Object obj) throws
 		SecurityException, NoSuchMethodException, IllegalArgumentException,
 		IllegalAccessException, InvocationTargetException {
@@ -63,7 +67,7 @@ public abstract class SCRHelper {
 	 * A wrapper for SCR to retrieve all Services of the given class.
 	 */
 	@SuppressWarnings("unchecked")
-	protected static <T> List<T> locateServicesFor(ComponentContext ctx, Class<T> tt) {
+	public static <T> List<T> locateServicesFor(ComponentContext ctx, Class<T> tt) {
 		List<T> ret = new LinkedList<T>();
 		String[] name = tt.getName().split("\\.");
 		Object[] vv = ctx.locateServices(name[name.length - 1]);
@@ -84,7 +88,7 @@ public abstract class SCRHelper {
 	 * A wrapper for SCR to retrieve the first-qualifying service of the given class.
 	 */
 	@SuppressWarnings("unchecked")
-	protected static <T> T locateServiceFor(ComponentContext ctx, Class<T> tt) {
+	public static <T> T locateServiceFor(ComponentContext ctx, Class<T> tt) {
 		String[] name = tt.getName().split("\\.");
 		return (T) ctx.locateService(name[name.length - 1]);
 	}
