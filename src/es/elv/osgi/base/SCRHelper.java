@@ -112,7 +112,7 @@ public abstract class SCRHelper {
 		return 	new LogInterface() {
 			private void log(int level, String message, Throwable exception) {
 				LogService s = null;
-				ServiceReference logRef = bctx.getServiceReference("org.osgi.service.log.LogService");
+				ServiceReference<?> logRef = bctx.getServiceReference("org.osgi.service.log.LogService");
 				if (logRef != null)
 					s = (LogService) bctx.getService(logRef);
 
